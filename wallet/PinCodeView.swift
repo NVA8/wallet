@@ -3,80 +3,87 @@
 //  wallet
 //
 //  Created by Валерий Никитин on 09.10.2023.
+//  Refactored to MVVM by Codex on 24.03.2024.
 //
 
 import SwiftUI
 
 struct PinCodeView: View {
-    @Binding var isPresented: Bool
-    @Binding var passwordInput: String
-    @State private var showErrorAlert: Bool = false
-    let correctPassword: String
-    let onAuthenticated: () -> Void
-    private let pinLength = 4
+    @ObservedObject var viewModel: AuthenticationViewModel
+    private let columns: [GridItem] = Array(repeating: GridItem(.flexible(), spacing: 24), count: 3)
 
     var body: some View {
-        VStack(spacing: 20) {
-            Text("Введите пароль")
-            
-            if showErrorAlert {
-                Text("Введен неверный пароль!")
+        VStack(spacing: 24) {
+            Text("Введите PIN-код")
+                .font(.title3.weight(.semibold))
+
+            if viewModel.showError {
+                Text("Неверный PIN, попробуйте снова.")
                     .foregroundColor(.red)
-                    .padding()
+                    .transition(.opacity)
             }
 
-            HStack {
-                ForEach(0..<pinLength) { index in
+            HStack(spacing: 16) {
+                ForEach(0..<4, id: \.self) { index in
                     Circle()
-                        .frame(width: 20, height: 20)
-                        .foregroundColor(passwordInput.count > index ? .blue : .gray)
+                        .frame(width: 16, height: 16)
+                        .foregroundColor(index < viewModel.pinInput.count ? .blue : .gray.opacity(0.4))
                 }
             }
-            
-            VStack(spacing: 10) {
-                ForEach(1...3, id: \.self) { row in
-                    HStack(spacing: 60) {
-                        ForEach(1...3, id: \.self) { col in
-                            let number = col + (row - 1) * 3
-                            numberButton(number: number)
-                        }
-                    }
+
+            LazyVGrid(columns: columns, spacing: 16) {
+                ForEach(1...9, id: \.self) { number in
+                    numberButton(number: number)
                 }
+                biometricButton
                 numberButton(number: 0)
+                deleteButton
             }
-            .padding()
+            .padding(.horizontal, 24)
         }
-        .alert(isPresented: $showErrorAlert) {
-            Alert(title: Text("Ошибка"),
-                  message: Text("Введен неверный пароль, правильный 1234"),
-                  dismissButton: .default(Text("Попробовать еще раз")))
-        }
-    }
-    
-    func numberButton(number: Int) -> some View {
-        return Button(action: {
-            if passwordInput.count < pinLength {
-                passwordInput.append("\(number)")
-                checkPassword()
-            }
-        }) {
-            Text("\(number)")
-                .font(.largeTitle)
-                .frame(width: 60, height: 60)
-                .background(Color.blue.opacity(0.2))
-                .clipShape(Circle())
+        .padding()
+        .interactiveDismissDisabled()
+        .task {
+            await viewModel.tryBiometricUnlock()
         }
     }
 
-    func checkPassword() {
-        if passwordInput.count == pinLength {
-            if passwordInput == correctPassword {
-                onAuthenticated()
-                isPresented = false
-            } else {
-                passwordInput = ""
-                showErrorAlert = true
-            }
+    private func numberButton(number: Int) -> some View {
+        Button {
+            viewModel.handle(digit: number)
+        } label: {
+            Text("\(number)")
+                .font(.title)
+                .frame(maxWidth: .infinity, minHeight: 60)
+                .background(Color.blue.opacity(0.15))
+                .foregroundColor(.primary)
+                .clipShape(RoundedRectangle(cornerRadius: 16))
+        }
+    }
+
+    private var deleteButton: some View {
+        Button {
+            viewModel.backspace()
+        } label: {
+            Image(systemName: "delete.left")
+                .font(.title2)
+                .frame(maxWidth: .infinity, minHeight: 60)
+                .background(Color.gray.opacity(0.15))
+                .foregroundColor(.primary)
+                .clipShape(RoundedRectangle(cornerRadius: 16))
+        }
+    }
+
+    private var biometricButton: some View {
+        Button {
+            Task { await viewModel.tryBiometricUnlock() }
+        } label: {
+            Image(systemName: "faceid")
+                .font(.title2)
+                .frame(maxWidth: .infinity, minHeight: 60)
+                .background(Color.green.opacity(0.15))
+                .foregroundColor(.primary)
+                .clipShape(RoundedRectangle(cornerRadius: 16))
         }
     }
 }
